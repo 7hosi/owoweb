@@ -176,8 +176,11 @@ function TextBox(props: { paragraph: Paragraph; containerWidth: number; containe
         position: "absolute",
         left: `${leftPct()}%`,
         top: `${topPct()}%`,
-        width: `${widthPct()}%`,
-        height: `${heightPct()}%`,
+        // Use min-width/min-height so the box *grows* to fit the text
+        // when the OCR bounding box is too tight. The dark backdrop will
+        // cover all visible text rather than clipping it.
+        "min-width": `${widthPct()}%`,
+        "min-height": `${heightPct()}%`,
         "writing-mode": isVertical() ? "vertical-rl" : "horizontal-tb",
         "font-size": `${fontSize()}px`,
         "line-height": "1.2",
