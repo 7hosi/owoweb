@@ -53,6 +53,8 @@ function main(): void {
 
         const rect = el.getBoundingClientRect()
 
+        let foundCompatibleElement = false
+
         const image = new Promise<ArrayBuffer | null>(async (resolve, reject) => {
           try {
             if (el instanceof HTMLCanvasElement) {
@@ -63,6 +65,7 @@ function main(): void {
                 resolve(await blob.arrayBuffer())
               }, "image/png")
             } else if (el instanceof HTMLImageElement) {
+              foundCompatibleElement = true
               try {
                 const response = await browser.runtime.sendMessage({
                   type: "FETCH_IMAGE_BYTES",
@@ -98,10 +101,12 @@ function main(): void {
           })
           .catch((error) => {
             console.error("Error getting image:", error)
-
-            event.preventDefault()
-            event.stopPropagation()
           })
+
+        if (foundCompatibleElement) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
       }
     },
     { capture: true },
