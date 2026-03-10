@@ -29,12 +29,20 @@ export default function Popup(props: {
     }
 
     ws.onmessage = (messageEv) => {
-      console.log(messageEv)
       if (messageEv.data === "True") {
-        console.log("Waiting for response")
-      } else {
-        console.log("Response received", messageEv.data)
+        // Now waiting for OCR data
+        console.log("Waiting for response. Event:", messageEv)
+      } else if (messageEv.data === "False") {
+        // Failure
+        console.warn("OCR failed. Event:", messageEv)
         ws.close()
+      } else {
+        // OCR data
+        const data = JSON.parse(messageEv.data)
+        console.log("Response received. Event:", messageEv, "Data:", data)
+        ws.close()
+
+        handleOcrData(data as OcrResponse)
       }
     }
 
@@ -46,6 +54,35 @@ export default function Popup(props: {
       console.error("WebSocket error:", error)
     }
   })
+
+  type BoundingBox = {
+    center_x: number
+    center_y: number
+    height: number
+    rotation_z: number | null
+    width: number
+  }
+
+  type Line = {
+    bounding_box: BoundingBox
+    text: string
+  }
+
+  type Paragraph = {
+    bounding_box: BoundingBox
+    lines: Line[]
+    writing_direction: "TOP_TO_BOTTOM" | "LEFT_TO_RIGHT"
+  }
+
+  type OcrResponse = {
+    image_properties: {
+      height: number
+      width: number
+    }
+    paragraphs: Paragraph
+  }
+
+  function handleOcrData(ocrResponse: OcrResponse) {}
 
   // Basic styling for our Solid app
   return (
