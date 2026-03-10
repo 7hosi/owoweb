@@ -120,11 +120,7 @@ export default function Overlay(props: {
 
 // ── TextBox Component ────────────────────────────────────────────────────────
 
-function TextBox(props: {
-  paragraph: Paragraph
-  containerWidth: number
-  containerHeight: number
-}) {
+function TextBox(props: { paragraph: Paragraph; containerWidth: number; containerHeight: number }) {
   const isVertical = () => props.paragraph.writing_direction === "TOP_TO_BOTTOM"
   const bb = () => props.paragraph.bounding_box
 
@@ -133,11 +129,6 @@ function TextBox(props: {
   const top = () => (bb().center_y - bb().height / 2) * props.containerHeight
   const width = () => bb().width * props.containerWidth
   const height = () => bb().height * props.containerHeight
-
-  // Build the full paragraph text by joining lines
-  const paragraphText = () => {
-    return props.paragraph.lines.map((line) => line.text).join(isVertical() ? "" : " ")
-  }
 
   // Compute a reasonable font size from the bounding boxes.
   // For vertical text, use the narrowest line width as the character size.
@@ -172,7 +163,18 @@ function TextBox(props: {
         "pointer-events": "auto",
       }}
     >
-      <span class="owoweb-textbox-content">{paragraphText()}</span>
+      <span class="owoweb-textbox-content">
+        <For each={props.paragraph.lines}>
+          {(line, index) => (
+            <>
+              {line.text}
+              <Show when={index() < props.paragraph.lines.length - 1}>
+                <br />
+              </Show>
+            </>
+          )}
+        </For>
+      </span>
     </div>
   )
 }
