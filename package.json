@@ -1,6 +1,5 @@
 {
-  "name": "wxt-solid-starter",
-  "description": "manifest.json description",
+  "name": "owoweb",
   "private": true,
   "version": "0.0.0",
   "type": "module",
