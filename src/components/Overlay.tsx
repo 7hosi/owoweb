@@ -241,8 +241,58 @@ function TextBox(props: {
     }
   }
 
+  // ── Native capture-phase event interception ────────────────────────────────
+  // Solid.js delegates events to the document root, so `stopPropagation()`
+  // from an onClick prop does NOT prevent other native listeners (like a
+  // manga reader's "next page" handler) from firing.  By attaching native
+  // listeners with `capture: true` directly on the element we intercept
+  // events *before* they can reach anything else in the DOM.
+  onMount(() => {
+    /** Kill an event completely so it never reaches the page. */
+    const kill = (e: Event) => {
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+      e.preventDefault()
+    }
+
+    const captureOpts: AddEventListenerOptions = { capture: true }
+
+    boxRef.addEventListener("click", kill, captureOpts)
+    boxRef.addEventListener("mousedown", kill, captureOpts)
+    boxRef.addEventListener("mouseup", kill, captureOpts)
+    boxRef.addEventListener("pointerdown", kill, captureOpts)
+    boxRef.addEventListener("pointerup", kill, captureOpts)
+    boxRef.addEventListener("contextmenu", kill, captureOpts)
+    boxRef.addEventListener("mousemove", kill, captureOpts)
+    boxRef.addEventListener("touchstart", kill, captureOpts)
+    boxRef.addEventListener("touchend", kill, captureOpts)
+
+    // Double-click / double-tap → add image to Anki
+    boxRef.addEventListener(
+      "dblclick",
+      (e) => {
+        kill(e)
+        props.onAddToAnki()
+      },
+      captureOpts,
+    )
+
+    onCleanup(() => {
+      boxRef.removeEventListener("click", kill, captureOpts)
+      boxRef.removeEventListener("mousedown", kill, captureOpts)
+      boxRef.removeEventListener("mouseup", kill, captureOpts)
+      boxRef.removeEventListener("pointerdown", kill, captureOpts)
+      boxRef.removeEventListener("pointerup", kill, captureOpts)
+      boxRef.removeEventListener("contextmenu", kill, captureOpts)
+      boxRef.removeEventListener("mousemove", kill, captureOpts)
+      boxRef.removeEventListener("touchstart", kill, captureOpts)
+      boxRef.removeEventListener("touchend", kill, captureOpts)
+    })
+  })
+
   return (
     <div
+      ref={boxRef}
       class="owoweb-textbox"
       style={{
         position: "absolute",
@@ -258,16 +308,6 @@ function TextBox(props: {
         "line-height": "1.2",
         "pointer-events": "auto",
       }}
-      // Intercept all interaction events so the underlying page doesn't
-      // react while the user is selecting text, using Yomitan, etc.
-      onClick={interceptEvent}
-      onMouseDown={interceptEvent}
-      onMouseUp={interceptEvent}
-      onPointerDown={interceptEvent}
-      onPointerUp={interceptEvent}
-      onContextMenu={interceptEvent}
-      onDblClick={interceptEvent}
-      onMouseMove={interceptEvent}
     >
       <span class="owoweb-textbox-content">
         <For each={props.paragraph.lines}>
