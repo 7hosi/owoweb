@@ -1,5 +1,5 @@
 import { render } from "solid-js/web"
-import Popup from "@/components/Overlay"
+import Overlay from "@/components/Overlay"
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -102,10 +102,7 @@ function main(): void {
           .then((image) => {
             console.log(image)
             // Render our Solid Component
-            render(
-              () => <Popup tagName={el.tagName.toLowerCase()} image={image} />,
-              container,
-            )
+            render(() => <Overlay tagName={el.tagName.toLowerCase()} image={image} />, container)
           })
           .catch((error) => {
             console.error("Error getting image:", error)
