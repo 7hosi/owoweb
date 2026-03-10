@@ -1,3 +1,3 @@
-# WXT + SolidJS
+# OWOWEB
 
-This template should help get you started developing with SolidJS in WXT.
+Send images to [owocr](https://github.com/AuroraWright/owocr) (created by [AuroraWright](https://github.com/AuroraWright)) and dispay text boxes overlayed on the image.
