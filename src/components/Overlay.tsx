@@ -135,6 +135,11 @@ export default function Overlay(props: {
 
 // ── TextBox Component ────────────────────────────────────────────────────────
 
+/** Stop events from leaking through the text box to the page underneath. */
+const interceptEvent = (e: Event) => {
+  e.stopPropagation()
+}
+
 function TextBox(props: { paragraph: Paragraph; containerWidth: number; containerHeight: number }) {
   const isVertical = () => props.paragraph.writing_direction === "TOP_TO_BOTTOM"
   const bb = () => props.paragraph.bounding_box
@@ -178,6 +183,16 @@ function TextBox(props: { paragraph: Paragraph; containerWidth: number; containe
         "line-height": "1.2",
         "pointer-events": "auto",
       }}
+      // Intercept all interaction events so the underlying page doesn't
+      // react while the user is selecting text, using Yomitan, etc.
+      onClick={interceptEvent}
+      onMouseDown={interceptEvent}
+      onMouseUp={interceptEvent}
+      onPointerDown={interceptEvent}
+      onPointerUp={interceptEvent}
+      onContextMenu={interceptEvent}
+      onDblClick={interceptEvent}
+      onMouseMove={interceptEvent}
     >
       <span class="owoweb-textbox-content">
         <For each={props.paragraph.lines}>
