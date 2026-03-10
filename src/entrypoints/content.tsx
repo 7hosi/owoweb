@@ -8,6 +8,7 @@ export default defineContentScript({
 })
 
 const markedAsAlreadyOcrdClass = "owoweb-overlay"
+const wrapperClass = "owoweb-wrapper"
 
 function main(): void {
   console.log("owoweb loaded")
@@ -45,13 +46,20 @@ function main(): void {
 
         console.log("Rendering popup for target element from click point. The target element:", el)
 
+        // Wrap the target element so the overlay is always positioned
+        // relative to it – survives zoom, scroll, and layout changes.
+        const wrapper = ensureWrapper(el)
+
         const container = document.createElement("div")
         container.classList.add(markedAsAlreadyOcrdClass)
-        document.body.appendChild(container)
+        // Position the overlay container to fill the wrapper exactly
+        container.style.position = "absolute"
+        container.style.inset = "0"
+        container.style.pointerEvents = "none"
+        container.style.zIndex = "999999"
+        wrapper.appendChild(container)
 
         activeOverlays.set(el, container)
-
-        const rect = el.getBoundingClientRect()
 
         let foundCompatibleElement = false
 
@@ -95,7 +103,7 @@ function main(): void {
             console.log(image)
             // Render our Solid Component
             render(
-              () => <Popup rect={rect} tagName={el.tagName.toLowerCase()} image={image} />,
+              () => <Popup tagName={el.tagName.toLowerCase()} image={image} />,
               container,
             )
           })
@@ -111,4 +119,37 @@ function main(): void {
     },
     { capture: true },
   )
+}
+
+/**
+ * Wrap the target element in a position:relative container so that the
+ * overlay can be absolutely positioned on top of it.  If the element is
+ * already wrapped (e.g. from a previous OCR run on a different image that
+ * was swapped into the same slot), reuse the existing wrapper.
+ */
+function ensureWrapper(el: Element): HTMLDivElement {
+  // Already wrapped?
+  if (el.parentElement?.classList.contains(wrapperClass)) {
+    return el.parentElement as HTMLDivElement
+  }
+
+  const wrapper = document.createElement("div")
+  wrapper.classList.add(wrapperClass)
+  wrapper.style.position = "relative"
+  wrapper.style.display = "inline-block"
+
+  // Inherit the element's dimensions so the wrapper matches exactly
+  const computed = getComputedStyle(el)
+  if (computed.display === "block") {
+    wrapper.style.display = "block"
+  }
+  if (computed.maxWidth) {
+    wrapper.style.maxWidth = computed.maxWidth
+  }
+
+  // Insert wrapper where the element is, then move element inside
+  el.parentNode!.insertBefore(wrapper, el)
+  wrapper.appendChild(el)
+
+  return wrapper
 }

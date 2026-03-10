@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show } from "solid-js"
+import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js"
 import { owocrSettingsStore } from "~/utils/storage"
 import { OwocrSettings } from "~/utils/settings"
 
@@ -42,12 +42,27 @@ type OcrResponse = {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function Overlay(props: {
-  rect: DOMRect
   tagName: string
   image: string | ArrayBufferLike | ArrayBufferView<ArrayBufferLike> | null
 }) {
   const [socket, setSocket] = createSignal<WebSocket | null>(null)
   const [ocrData, setOcrData] = createSignal<OcrResponse | null>(null)
+  const [containerSize, setContainerSize] = createSignal({ width: 0, height: 0 })
+  let containerRef!: HTMLDivElement
+
+  // Track the container size so font-size calculations stay correct on resize/zoom
+  onMount(() => {
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerSize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        })
+      }
+    })
+    observer.observe(containerRef)
+    onCleanup(() => observer.disconnect())
+  })
 
   owocrSettingsStore.getValue().then((settings) => {
     const ws = createWebSocket(settings)
@@ -87,13 +102,13 @@ export default function Overlay(props: {
 
   return (
     <div
+      ref={containerRef}
       class="owoweb-overlay-root"
       style={{
         position: "absolute",
-        top: `${props.rect.top + window.scrollY}px`,
-        left: `${props.rect.left + window.scrollX}px`,
-        width: `${props.rect.width}px`,
-        height: `${props.rect.height}px`,
+        inset: "0",
+        width: "100%",
+        height: "100%",
         "z-index": "999999",
         "pointer-events": "none",
       }}
@@ -107,8 +122,8 @@ export default function Overlay(props: {
             {(paragraph) => (
               <TextBox
                 paragraph={paragraph}
-                containerWidth={props.rect.width}
-                containerHeight={props.rect.height}
+                containerWidth={containerSize().width}
+                containerHeight={containerSize().height}
               />
             )}
           </For>
@@ -124,22 +139,23 @@ function TextBox(props: { paragraph: Paragraph; containerWidth: number; containe
   const isVertical = () => props.paragraph.writing_direction === "TOP_TO_BOTTOM"
   const bb = () => props.paragraph.bounding_box
 
-  // Convert normalized bounding box (0–1) to pixel positions within container
-  const left = () => (bb().center_x - bb().width / 2) * props.containerWidth
-  const top = () => (bb().center_y - bb().height / 2) * props.containerHeight
-  const width = () => bb().width * props.containerWidth
-  const height = () => bb().height * props.containerHeight
+  // Use percentage-based positioning from the normalized bounding box (0–1)
+  // so the position is always relative to the container / image.
+  const leftPct = () => (bb().center_x - bb().width / 2) * 100
+  const topPct = () => (bb().center_y - bb().height / 2) * 100
+  const widthPct = () => bb().width * 100
+  const heightPct = () => bb().height * 100
 
   // Compute a reasonable font size from the bounding boxes.
-  // For vertical text, use the narrowest line width as the character size.
+  // For vertical text, use the line width as the character size.
   // For horizontal text, use line height.
+  // containerWidth / containerHeight are live (ResizeObserver) so this
+  // auto-updates on zoom.
   const fontSize = () => {
     const lines = props.paragraph.lines
     if (lines.length === 0) return 16
 
     if (isVertical()) {
-      // In vertical mode each "line" is a vertical column – the width of
-      // the line bounding box closely matches the character size.
       const sizes = lines.map((l) => l.bounding_box.width * props.containerWidth)
       return Math.max(8, median(sizes))
     } else {
@@ -153,10 +169,10 @@ function TextBox(props: { paragraph: Paragraph; containerWidth: number; containe
       class="owoweb-textbox"
       style={{
         position: "absolute",
-        left: `${left()}px`,
-        top: `${top()}px`,
-        width: `${width()}px`,
-        height: `${height()}px`,
+        left: `${leftPct()}%`,
+        top: `${topPct()}%`,
+        width: `${widthPct()}%`,
+        height: `${heightPct()}%`,
         "writing-mode": isVertical() ? "vertical-rl" : "horizontal-tb",
         "font-size": `${fontSize()}px`,
         "line-height": "1.2",
@@ -189,7 +205,7 @@ function OverlayStyles() {
         color: transparent;
         background: transparent;
         cursor: default;
-        overflow: hidden;
+        overflow: visible;
         display: flex;
         align-items: flex-start;
         justify-content: flex-start;
