@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js"
-import { owocrSettingsStore } from "~/utils/storage"
-import { OwocrSettings } from "~/utils/settings"
+import { owocrSettingsStore, ankiConnectSettingsStore } from "~/utils/storage"
+import { OwocrSettings, AnkiConnectSettings } from "~/utils/settings"
+import { addImageToLatestNote } from "~/utils/ankiconnect"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,11 @@ export default function Overlay(props: {
   const [containerSize, setContainerSize] = createSignal({ width: 0, height: 0 })
   let containerRef!: HTMLDivElement
 
+  // ── Anki state ──────────────────────────────────────────────────────────────
+  const [ankiSettings, setAnkiSettings] = createSignal<AnkiConnectSettings | null>(null)
+  const [ankiStatus, setAnkiStatus] = createSignal<"idle" | "sending" | "ok" | "error">("idle")
+  const [ankiMessage, setAnkiMessage] = createSignal("")
+
   // Track the container size so font-size calculations stay correct on resize/zoom
   onMount(() => {
     const observer = new ResizeObserver((entries) => {
@@ -64,9 +70,14 @@ export default function Overlay(props: {
     onCleanup(() => observer.disconnect())
   })
 
+  // Load settings
   owocrSettingsStore.getValue().then((settings) => {
     const ws = createWebSocket(settings)
     setSocket(ws)
+  })
+
+  ankiConnectSettingsStore.getValue().then((settings) => {
+    setAnkiSettings(settings)
   })
 
   createEffect(() => {
@@ -100,6 +111,49 @@ export default function Overlay(props: {
     ws.onerror = (error) => console.error("WebSocket error:", error)
   })
 
+  async function handleAddToAnki() {
+    const settings = ankiSettings()
+    if (!settings) return
+
+    if (!settings.noteType || !settings.pictureField) {
+      setAnkiStatus("error")
+      setAnkiMessage("Configure note type & picture field in the extension popup first.")
+      return
+    }
+
+    if (!props.image) {
+      setAnkiStatus("error")
+      setAnkiMessage("No image available.")
+      return
+    }
+
+    setAnkiStatus("sending")
+    setAnkiMessage("")
+
+    try {
+      // Ensure we have an ArrayBuffer
+      let buffer: ArrayBuffer
+      if (props.image instanceof ArrayBuffer) {
+        buffer = props.image
+      } else if (ArrayBuffer.isView(props.image)) {
+        buffer = props.image.buffer as ArrayBuffer
+      } else {
+        throw new Error("Unsupported image format")
+      }
+
+      const result = await addImageToLatestNote(settings, buffer)
+      setAnkiStatus("ok")
+      setAnkiMessage(`Added to note ${result.noteId}`)
+      setTimeout(() => {
+        setAnkiStatus("idle")
+        setAnkiMessage("")
+      }, 3000)
+    } catch (err) {
+      setAnkiStatus("error")
+      setAnkiMessage(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <div
       ref={containerRef}
@@ -116,6 +170,21 @@ export default function Overlay(props: {
       {/* Inject scoped styles for the text boxes */}
       <OverlayStyles />
 
+      {/* ── Anki toast (bottom-right corner) ───────────────────────── */}
+      <Show when={ankiMessage()}>
+        <div
+          class={`owoweb-anki-toast ${
+            ankiStatus() === "error"
+              ? "owoweb-anki-toast-error"
+              : ankiStatus() === "ok"
+                ? "owoweb-anki-toast-success"
+                : "owoweb-anki-toast-info"
+          }`}
+        >
+          {ankiMessage()}
+        </div>
+      </Show>
+
       <Show when={ocrData()}>
         {(data) => (
           <For each={data().paragraphs}>
@@ -124,6 +193,7 @@ export default function Overlay(props: {
                 paragraph={paragraph}
                 containerWidth={containerSize().width}
                 containerHeight={containerSize().height}
+                onAddToAnki={handleAddToAnki}
               />
             )}
           </For>
@@ -135,12 +205,14 @@ export default function Overlay(props: {
 
 // ── TextBox Component ────────────────────────────────────────────────────────
 
-/** Stop events from leaking through the text box to the page underneath. */
-const interceptEvent = (e: Event) => {
-  e.stopPropagation()
-}
+function TextBox(props: {
+  paragraph: Paragraph
+  containerWidth: number
+  containerHeight: number
+  onAddToAnki: () => void
+}) {
+  let boxRef!: HTMLDivElement
 
-function TextBox(props: { paragraph: Paragraph; containerWidth: number; containerHeight: number }) {
   const isVertical = () => props.paragraph.writing_direction === "TOP_TO_BOTTOM"
   const bb = () => props.paragraph.bounding_box
 
@@ -268,6 +340,45 @@ function OverlayStyles() {
       .owoweb-textbox ::selection {
         background: rgba(66, 133, 244, 0.45);
         color: white;
+      }
+
+      /* ── Anki toast ─────────────────────────────────────────────── */
+
+      .owoweb-anki-toast {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: Inter, system-ui, sans-serif;
+        border-radius: 6px;
+        pointer-events: none;
+        z-index: 1000000;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+        animation: owoweb-toast-in 0.2s ease;
+      }
+
+      @keyframes owoweb-toast-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      .owoweb-anki-toast-info {
+        color: #e0e7ff;
+        background: rgba(30, 30, 60, 0.85);
+      }
+
+      .owoweb-anki-toast-success {
+        color: #34d399;
+        background: rgba(10, 40, 30, 0.9);
+      }
+
+      .owoweb-anki-toast-error {
+        color: #f87171;
+        background: rgba(50, 10, 10, 0.9);
+        max-width: 260px;
+        word-break: break-word;
       }
     `}</style>
   )
