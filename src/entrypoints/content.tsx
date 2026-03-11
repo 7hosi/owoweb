@@ -74,21 +74,46 @@ function main(): void {
               }, "image/png")
             } else if (el instanceof HTMLImageElement) {
               foundCompatibleElement = true
-              try {
-                const response = await browser.runtime.sendMessage({
-                  type: "FETCH_IMAGE_BYTES",
-                  url: el.src,
-                })
+              if (el.src.startsWith("blob:")) {
+                try {
+                  const canvas = document.createElement("canvas")
+                  canvas.width = el.naturalWidth
+                  canvas.height = el.naturalHeight
+                  const ctx = canvas.getContext("2d")
 
-                if (response.success) {
-                  // Reconstruct the ArrayBuffer from the returned array
-                  const buffer = new Uint8Array(response.data).buffer
-                  resolve(buffer)
-                } else {
-                  throw new Error(response.error)
+                  if (!ctx) throw new Error("Failed to get canvas context")
+
+                  // Draw the image element onto the canvas
+                  ctx.drawImage(el, 0, 0)
+
+                  // Convert canvas to blob, then to ArrayBuffer
+                  canvas.toBlob(async (blob) => {
+                    if (!blob) {
+                      reject(new Error("Failed to create blob from canvas"))
+                      return
+                    }
+                    resolve(await blob.arrayBuffer())
+                  }, "image/png")
+                } catch (err) {
+                  reject(new Error("Canvas extraction failed (likely tainted)", { cause: err }))
                 }
-              } catch (err) {
-                reject(err)
+              } else {
+                try {
+                  const response = await browser.runtime.sendMessage({
+                    type: "FETCH_IMAGE_BYTES",
+                    url: el.src,
+                  })
+
+                  if (response.success) {
+                    // Reconstruct the ArrayBuffer from the returned array
+                    const buffer = new Uint8Array(response.data).buffer
+                    resolve(buffer)
+                  } else {
+                    throw new Error(response.error)
+                  }
+                } catch (err) {
+                  reject(err)
+                }
               }
             } else {
               resolve(null)
