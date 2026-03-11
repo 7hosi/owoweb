@@ -9,5 +9,13 @@ export default defineConfig({
     homepage_url: "https://github.com/7hosi/owoweb",
     host_permissions: ["<all_urls>"],
     permissions: ["storage"],
+    browser_specific_settings: {
+      gecko: {
+        // @ts-ignore
+        data_collection_permissions: {
+          required: ["none"],
+        },
+      },
+    },
   },
 })
